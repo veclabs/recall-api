@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getStripe } from '@/lib/stripe';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import Stripe from 'stripe';
 import { generateApiKey } from '@/lib/keys';
 import { Resend } from 'resend';
 
 export async function POST(req: NextRequest) {
+  console.log('PROVISION START');
+
   try {
+    console.log('Provision called, auth header present:', !!req.headers.get('authorization'));
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: '2026-03-25.dahlia' as any,
+    });
+
     // Authenticate using Supabase JWT
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -16,7 +29,6 @@ export async function POST(req: NextRequest) {
     const jwt = authHeader.replace('Bearer ', '').trim();
 
     // Verify JWT with Supabase
-    const supabaseAdmin = getSupabaseAdmin();
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(jwt);
     if (userError || !user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
@@ -43,7 +55,6 @@ export async function POST(req: NextRequest) {
     // Create Stripe customer if not exists
     let stripeCustomerId = existingUser?.stripe_customer_id;
     if (!stripeCustomerId) {
-      const stripe = getStripe();
       const customer = await stripe.customers.create({
         email: user.email!,
         metadata: { supabase_id: user.id },
@@ -51,10 +62,15 @@ export async function POST(req: NextRequest) {
       stripeCustomerId = customer.id;
 
       // Subscribe to free tier
-      await stripe.subscriptions.create({
-        customer: stripeCustomerId,
-        items: [{ price: process.env.STRIPE_FREE_TIER_PRICE_ID }],
-      });
+      try {
+        await stripe.subscriptions.create({
+          customer: stripeCustomerId,
+          items: [{ price: process.env.STRIPE_FREE_TIER_PRICE_ID }],
+        });
+      } catch (stripeErr) {
+        console.warn('Stripe free subscription failed:', stripeErr);
+        // continue — don't crash provision
+      }
     }
 
     // Upsert public.users row
@@ -101,6 +117,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
+    console.error('Provision error:', err.message, err.stack);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
