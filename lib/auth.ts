@@ -4,7 +4,7 @@ import { hashKey } from './keys';
 
 export interface AuthResult {
   userId: string;
-  plan: 'free' | 'pro';
+  plan: 'free' | 'pro' | 'business' | 'enterprise';
 }
 
 export async function validateApiKey(req: NextRequest): Promise<AuthResult | null> {

@@ -18,8 +18,12 @@ export async function POST(req: NextRequest) {
   switch (event.type) {
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
-      const plan = session.items.data[0].price.id === process.env.STRIPE_PRO_PRICE_ID
-        ? 'pro' : 'free';
+      const plan =
+        session.items.data[0].price.id === process.env.STRIPE_PRO_PRICE_ID
+          ? 'pro'
+          : session.items.data[0].price.id === process.env.STRIPE_BUSINESS_PRICE_ID
+          ? 'business'
+          : 'free';
 
       await supabaseAdmin
         .from('users')
