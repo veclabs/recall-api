@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
+import { PLAN_LIMITS, Plan } from '@/lib/usage';
 
 export async function GET(req: NextRequest) {
   const auth = await validateApiKey(req);
@@ -23,6 +24,20 @@ export async function POST(req: NextRequest) {
 
   if (!name || !dimensions) {
     return NextResponse.json({ error: 'name and dimensions required' }, { status: 400 });
+  }
+
+  const { count } = await supabaseAdmin
+    .from('collections')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', auth.userId);
+
+  const limits = PLAN_LIMITS[auth.plan as Plan] ?? PLAN_LIMITS.free;
+
+  if (limits.collections !== -1 && (count ?? 0) >= limits.collections) {
+    return NextResponse.json(
+      { error: `Collection limit reached (${limits.collections} collections on ${auth.plan} plan). Upgrade at app.veclabs.xyz/pricing` },
+      { status: 429 }
+    );
   }
 
   const { data, error } = await supabaseAdmin

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { getCollection } from '@/lib/collections';
-import { trackUsage } from '@/lib/usage';
+import { trackUsage, checkLimits } from '@/lib/usage';
 
 export async function POST(
   req: NextRequest,
@@ -10,6 +10,11 @@ export async function POST(
 ) {
   const auth = await validateApiKey(req);
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const queryCheck = await checkLimits(auth.userId, auth.plan, 'query', supabaseAdmin);
+  if (!queryCheck.allowed) {
+    return NextResponse.json({ error: queryCheck.reason }, { status: 429 });
+  }
 
   const { vector, topK = 10, filter, includeValues = false } = await req.json();
   if (!vector) return NextResponse.json({ error: 'vector required' }, { status: 400 });

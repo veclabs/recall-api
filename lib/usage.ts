@@ -39,6 +39,52 @@ export const PLAN_LIMITS: Record<Plan, {
   },
 };
 
+export async function checkLimits(
+  userId: string,
+  plan: string,
+  type: 'write' | 'query' | 'vectors',
+  supabaseAdmin: any
+): Promise<{ allowed: boolean; reason?: string }> {
+  const limits = PLAN_LIMITS[plan as Plan] ?? PLAN_LIMITS.free;
+
+  // -1 means unlimited
+  if (limits.writes === -1) return { allowed: true };
+
+  const month = new Date().toISOString().slice(0, 7);
+
+  const { data } = await supabaseAdmin
+    .from('usage')
+    .select('write_count, query_count, vector_count')
+    .eq('user_id', userId)
+    .eq('month', month)
+    .single();
+
+  const usage = data ?? { write_count: 0, query_count: 0, vector_count: 0 };
+
+  if (type === 'write' && usage.write_count >= limits.writes) {
+    return {
+      allowed: false,
+      reason: `Monthly write limit reached (${limits.writes.toLocaleString()} writes). Upgrade your plan at app.veclabs.xyz/pricing`,
+    };
+  }
+
+  if (type === 'query' && usage.query_count >= limits.queries) {
+    return {
+      allowed: false,
+      reason: `Monthly query limit reached (${limits.queries.toLocaleString()} queries). Upgrade your plan at app.veclabs.xyz/pricing`,
+    };
+  }
+
+  if (type === 'vectors' && usage.vector_count >= limits.vectors) {
+    return {
+      allowed: false,
+      reason: `Vector storage limit reached (${limits.vectors.toLocaleString()} vectors). Upgrade your plan at app.veclabs.xyz/pricing`,
+    };
+  }
+
+  return { allowed: true };
+}
+
 export async function trackUsage(
   userId: string,
   type: 'write' | 'query',
