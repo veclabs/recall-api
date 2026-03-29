@@ -33,25 +33,65 @@ export async function POST(req: NextRequest) {
     .eq('id', auth.userId)
     .single();
 
-  if (!user?.stripe_customer_id) {
-    return NextResponse.json(
-      { error: 'No billing account found. Please contact support.' },
-      { status: 400 }
-    );
-  }
-
   const priceId = plan === 'pro'
     ? process.env.STRIPE_PRO_PRICE_ID!
     : process.env.STRIPE_BUSINESS_PRICE_ID!;
 
-  const session = await stripe.checkout.sessions.create({
-    customer: user.stripe_customer_id,
-    mode: 'subscription',
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: 'https://app.veclabs.xyz/usage?upgraded=true',
-    cancel_url: 'https://app.veclabs.xyz/pricing?cancelled=true',
-    allow_promotion_codes: true,
-  });
+  let stripeCustomerId = user?.stripe_customer_id;
+
+  // If no customer ID or customer doesn't exist in current Stripe mode,
+  // create a new one
+  if (!stripeCustomerId) {
+    const newCustomer = await stripe.customers.create({
+      email: user?.email ?? '',
+      metadata: { supabase_id: auth.userId },
+    });
+    stripeCustomerId = newCustomer.id;
+
+    // Save new customer ID back to Supabase
+    await supabaseAdmin
+      .from('users')
+      .update({ stripe_customer_id: stripeCustomerId })
+      .eq('id', auth.userId);
+  }
+
+  // Wrap the checkout session creation to handle stale customer IDs
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      customer: stripeCustomerId,
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: 'https://app.veclabs.xyz/usage?upgraded=true',
+      cancel_url: 'https://app.veclabs.xyz/pricing?cancelled=true',
+      allow_promotion_codes: true,
+    });
+  } catch (stripeErr: any) {
+    // Customer exists in DB but not in this Stripe mode — create fresh
+    if (stripeErr.code === 'resource_missing') {
+      const newCustomer = await stripe.customers.create({
+        email: user?.email ?? '',
+        metadata: { supabase_id: auth.userId },
+      });
+      stripeCustomerId = newCustomer.id;
+
+      await supabaseAdmin
+        .from('users')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', auth.userId);
+
+      session = await stripe.checkout.sessions.create({
+        customer: stripeCustomerId,
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: 'https://app.veclabs.xyz/usage?upgraded=true',
+        cancel_url: 'https://app.veclabs.xyz/pricing?cancelled=true',
+        allow_promotion_codes: true,
+      });
+    } else {
+      throw stripeErr;
+    }
+  }
 
   return NextResponse.json({ url: session.url });
 }
