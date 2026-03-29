@@ -45,7 +45,7 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  deleteCollection(auth.userId, name);
+  await deleteCollection(auth.userId, name);
 
   return NextResponse.json({ deleted: true });
 }

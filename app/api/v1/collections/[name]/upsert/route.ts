@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
-import { getCollection } from '@/lib/collections';
+import { getCollection, saveCollection } from '@/lib/collections';
 import { trackUsage, checkLimits } from '@/lib/usage';
 
 export async function POST(
@@ -39,8 +39,10 @@ export async function POST(
     return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
   }
 
-  const collection = getCollection(auth.userId, name, col.dimensions, col.metric);
+  const collection = await getCollection(auth.userId, name, col.dimensions, col.metric);
   const result = await collection.upsert(records);
+
+  await saveCollection(auth.userId, name, collection);
 
   const stats = await collection.describeIndexStats();
 

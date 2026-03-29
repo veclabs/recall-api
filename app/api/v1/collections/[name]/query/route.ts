@@ -30,7 +30,7 @@ export async function POST(
 
   if (!col) return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
 
-  const collection = getCollection(auth.userId, name, col.dimensions, col.metric);
+  const collection = await getCollection(auth.userId, name, col.dimensions, col.metric);
   const results = await collection.query({ vector, topK, filter, includeValues });
 
   await trackUsage(auth.userId, 'query');

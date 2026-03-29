@@ -27,7 +27,7 @@ export async function POST(
 
   if (!col) return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
 
-  const collection = getCollection(auth.userId, name, col.dimensions, col.metric);
+  const collection = await getCollection(auth.userId, name, col.dimensions, col.metric);
   // fetch() is not yet in the published @veclabs/solvec types; cast to any until the SDK exposes it
   const result = (collection as any).fetch(ids);
 

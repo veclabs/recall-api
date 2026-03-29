@@ -21,7 +21,7 @@ export async function GET(
 
   if (!col) return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
 
-  const collection = getCollection(auth.userId, name, col.dimensions, col.metric);
+  const collection = await getCollection(auth.userId, name, col.dimensions, col.metric);
   const stats = await collection.describeIndexStats();
 
   return NextResponse.json({ stats });
