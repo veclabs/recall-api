@@ -8,27 +8,36 @@ export const PLAN_LIMITS: Record<Plan, {
   vectors: number;
   collections: number;
   api_keys: number;
+  // Feature gates
+  hasIrys: boolean;          // permanent storage on Arweave via Irys
+  hasSolanaAnchoring: boolean; // Merkle root posted to Solana on-chain
 }> = {
   free: {
-    writes: 10_000,
-    queries: 50_000,
-    vectors: 100_000,
-    collections: 3,
+    writes: 1_000,
+    queries: 10_000,
+    vectors: 5_000,
+    collections: 2,
     api_keys: 1,
+    hasIrys: false,
+    hasSolanaAnchoring: false,
   },
   pro: {
-    writes: 500_000,
-    queries: 1_000_000,
-    vectors: 2_000_000,
+    writes: 50_000,
+    queries: 500_000,
+    vectors: 500_000,
     collections: 25,
     api_keys: 5,
+    hasIrys: true,
+    hasSolanaAnchoring: true,
   },
   business: {
-    writes: 5_000_000,
-    queries: 10_000_000,
-    vectors: 20_000_000,
+    writes: 500_000,
+    queries: 5_000_000,
+    vectors: 5_000_000,
     collections: -1,
     api_keys: -1,
+    hasIrys: true,
+    hasSolanaAnchoring: true,
   },
   enterprise: {
     writes: -1,
@@ -36,8 +45,19 @@ export const PLAN_LIMITS: Record<Plan, {
     vectors: -1,
     collections: -1,
     api_keys: -1,
+    hasIrys: true,
+    hasSolanaAnchoring: true,
   },
 };
+
+// Check if a plan has a specific feature
+export function planHasFeature(
+  plan: string,
+  feature: 'hasIrys' | 'hasSolanaAnchoring'
+): boolean {
+  const limits = PLAN_LIMITS[plan as Plan] ?? PLAN_LIMITS.free;
+  return limits[feature];
+}
 
 export async function checkLimits(
   userId: string,

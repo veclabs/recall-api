@@ -5,6 +5,7 @@ import { getCollection, saveCollection } from '@/lib/collections';
 import { getOrCreateUserWallet } from '@/lib/wallet';
 import { postMerkleRootToSolana } from '@/lib/merkle';
 import { trackUsage, checkLimits } from '@/lib/usage';
+import { planHasFeature } from '@/lib/usage';
 
 export async function POST(
   req: NextRequest,
@@ -40,7 +41,7 @@ export async function POST(
   const result = await collection.upsert(records);
 
   // saveCollection returns the computed Merkle root
-  const merkleRoot = await saveCollection(auth.userId, name, collection, userWallet);
+  const merkleRoot = await saveCollection(auth.userId, name, collection, planHasFeature(auth.plan, 'hasIrys') ? userWallet : undefined);
 
   const stats = await collection.describeIndexStats();
 
@@ -58,7 +59,7 @@ export async function POST(
   // Post Merkle root to Solana — fire and forget, does not block the response
   let solanaTx: string | null = null;
 
-  if (merkleRoot) {
+  if (merkleRoot && planHasFeature(auth.plan, 'hasSolanaAnchoring')) {
       solanaTx = await postMerkleRootToSolana(
         name, merkleRoot, userWallet.secretKey, records.length, auth.userId
       ).catch(() => null);
