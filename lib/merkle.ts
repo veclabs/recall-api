@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { AnchorProvider, Program, setProvider, Wallet } from '@coral-xyz/anchor';
+import { AnchorProvider, Program, setProvider } from '@coral-xyz/anchor';
 
 const PROGRAM_ID = new PublicKey('8xjQ2XrdhR4JkGAdTEB7i34DBkbrLRkcgchKjN1Vn5nP');
 const SOLANA_RPC = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
@@ -108,7 +108,11 @@ export async function postMerkleRootToSolana(
   try {
     const wallet = Keypair.fromSecretKey(walletSecretKey);
     const connection = new Connection(SOLANA_RPC, 'confirmed');
-    const anchorWallet = new Wallet(wallet);
+    const anchorWallet = {
+      publicKey: wallet.publicKey,
+      signTransaction: async (tx: any) => { tx.partialSign(wallet); return tx; },
+      signAllTransactions: async (txs: any[]) => { txs.forEach(tx => tx.partialSign(wallet)); return txs; },
+    };
     const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
     setProvider(provider);
 
