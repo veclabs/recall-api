@@ -2,7 +2,7 @@ import { SolVec } from '@veclabs/solvec';
 import type { DistanceMetric } from '@veclabs/solvec';
 import { Keypair } from '@solana/web3.js';
 import { getRedis, collectionKey } from './redis';
-import { uploadToShadowDrive, downloadFromShadowDrive } from './shadow-drive';
+import { uploadToIrys, downloadFromIrys } from './irys';
 import { computeMerkleRoot } from './merkle';
 
 // In-memory cache — survives within a warm function instance only
@@ -79,7 +79,7 @@ export async function getCollection(
   // 3. Shadow Drive — source of truth for cold starts
   if (userWallet) {
     try {
-      const sdData = await downloadFromShadowDrive(userId, collectionName, userWallet);
+      const sdData = await downloadFromIrys(userId, collectionName, userWallet);
       if (sdData) {
         const data = sdData as CollectionSnapshot;
         const collection = await restoreFromSnapshot(collectionName, dimensions, metric, data);
@@ -126,7 +126,7 @@ export async function saveCollection(
   if (userWallet) {
     try {
       const serverWallet = getServerWallet();
-      await uploadToShadowDrive(userId, collectionName, serverWallet, userWallet, snapshot);
+      await uploadToIrys(userId, collectionName, serverWallet, userWallet, snapshot);
       console.log(`[collections] uploaded ${vectorIds.length} vectors to Shadow Drive for ${userId}:${collectionName}`);
     } catch (err) {
       // Log but don't crash — Redis cache still has data
