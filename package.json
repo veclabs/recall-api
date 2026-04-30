@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@irys/upload": "^0.0.15",
     "@irys/upload-solana": "^0.1.8",
     "@solana/web3.js": "^1.98.4",

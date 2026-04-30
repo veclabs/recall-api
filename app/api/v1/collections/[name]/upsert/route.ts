@@ -57,7 +57,7 @@ export async function POST(
 
   // Post Merkle root to Solana — fire and forget, does not block the response
   if (merkleRoot) {
-    postMerkleRootToSolana(name, merkleRoot, userWallet.secretKey).catch((err) =>
+    postMerkleRootToSolana(name, merkleRoot, userWallet.secretKey, records.length).catch((err) =>
       console.warn('[upsert] Solana Merkle post failed:', err)
     );
   }
