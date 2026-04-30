@@ -1,6 +1,5 @@
 import { createHash } from 'crypto';
-import { Connection, Keypair, PublicKey } from '@solana/web3.js';
-import { AnchorProvider, Program, setProvider } from '@coral-xyz/anchor';
+import { PublicKey } from '@solana/web3.js';
 
 const PROGRAM_ID = new PublicKey('8xjQ2XrdhR4JkGAdTEB7i34DBkbrLRkcgchKjN1Vn5nP');
 const SOLANA_RPC = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
@@ -106,38 +105,43 @@ export async function postMerkleRootToSolana(
   vectorCount: number = 0
 ): Promise<string | null> {
   try {
+    const { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } = await import('@solana/web3.js');
     const wallet = Keypair.fromSecretKey(walletSecretKey);
     const connection = new Connection(SOLANA_RPC, 'confirmed');
-    const anchorWallet = {
-      publicKey: wallet.publicKey,
-      signTransaction: async (tx: any) => { tx.partialSign(wallet); return tx; },
-      signAllTransactions: async (txs: any[]) => { txs.forEach(tx => tx.partialSign(wallet)); return txs; },
-    };
-    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
-    setProvider(provider);
 
-    const program = new Program(IDL, provider);
-    const rootBytes = Array.from(Buffer.from(merkleRootHex, 'hex'));
     const collectionPDA = getCollectionPDA(wallet.publicKey, collectionName);
 
-    // Create collection on-chain if it doesn't exist yet
+    // update_merkle_root discriminator from IDL
+    const discriminator = Buffer.from([195, 173, 38, 60, 242, 203, 158, 93]);
+
+    // Encode args: new_root [u8;32] + new_vector_count u64 (little-endian)
+    const rootBytes = Buffer.from(merkleRootHex, 'hex');
+    const countBuffer = Buffer.alloc(8);
+    countBuffer.writeBigUInt64LE(BigInt(vectorCount));
+    const data = Buffer.concat([discriminator, rootBytes, countBuffer]);
+
+    const instruction = new TransactionInstruction({
+      programId: PROGRAM_ID,
+      keys: [
+        { pubkey: collectionPDA, isSigner: false, isWritable: true },
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+      ],
+      data,
+    });
+
+    // Check if collection exists — create if not
     const accountInfo = await connection.getAccountInfo(collectionPDA);
     if (!accountInfo) {
-      await (program.methods as any)
-        .createCollection(collectionName, 1536, 0)
-        .accounts({
-          collection: collectionPDA,
-          owner: wallet.publicKey,
-          systemProgram: new PublicKey('11111111111111111111111111111111'),
-        })
-        .rpc();
-      console.log(`[merkle] created collection on-chain: ${collectionPDA.toString()}`);
+      await createCollectionOnChain(connection, wallet, collectionPDA, collectionName);
     }
 
-    const sig = await (program.methods as any)
-      .updateMerkleRoot(rootBytes, BigInt(vectorCount))
-      .accounts({ collection: collectionPDA, authority: wallet.publicKey })
-      .rpc();
+    const tx = new Transaction().add(instruction);
+    tx.feePayer = wallet.publicKey;
+    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    tx.sign(wallet);
+
+    const sig = await connection.sendRawTransaction(tx.serialize());
+    await connection.confirmTransaction(sig, 'confirmed');
 
     console.log(`[merkle] root posted → https://explorer.solana.com/tx/${sig}?cluster=devnet`);
     return sig;
@@ -146,3 +150,93 @@ export async function postMerkleRootToSolana(
     return null;
   }
 }
+
+async function createCollectionOnChain(
+  connection: any,
+  wallet: any,
+  collectionPDA: any,
+  collectionName: string
+): Promise<void> {
+  const { Transaction, TransactionInstruction, PublicKey, SystemProgram } = await import('@solana/web3.js');
+
+  // create_collection discriminator
+  const discriminator = Buffer.from([156, 251, 92, 54, 233, 2, 16, 82]);
+
+  // Encode name as string (4 bytes length prefix + utf8)
+  const nameBytes = Buffer.from(collectionName, 'utf8');
+  const nameLenBuffer = Buffer.alloc(4);
+  nameLenBuffer.writeUInt32LE(nameBytes.length);
+
+  // dimensions u32 (1536) + metric u8 (0 = cosine)
+  const dimensionsBuffer = Buffer.alloc(4);
+  dimensionsBuffer.writeUInt32LE(1536);
+  const metricBuffer = Buffer.from([0]);
+
+  const data = Buffer.concat([discriminator, nameLenBuffer, nameBytes, dimensionsBuffer, metricBuffer]);
+
+  const instruction = new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: collectionPDA, isSigner: false, isWritable: true },
+      { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+      { pubkey: new PublicKey('11111111111111111111111111111111'), isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+
+  const tx = new Transaction().add(instruction);
+  tx.feePayer = wallet.publicKey;
+  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  tx.sign(wallet);
+
+  const sig = await connection.sendRawTransaction(tx.serialize());
+  await connection.confirmTransaction(sig, 'confirmed');
+  console.log(`[merkle] created collection on-chain: ${collectionPDA.toString()}`);
+}
+// export async function postMerkleRootToSolana(
+//   collectionName: string,
+//   merkleRootHex: string,
+//   walletSecretKey: Uint8Array,
+//   vectorCount: number = 0
+// ): Promise<string | null> {
+//   try {
+//     const wallet = Keypair.fromSecretKey(walletSecretKey);
+//     const connection = new Connection(SOLANA_RPC, 'confirmed');
+//     const anchorWallet = {
+//       publicKey: wallet.publicKey,
+//       signTransaction: async (tx: any) => { tx.partialSign(wallet); return tx; },
+//       signAllTransactions: async (txs: any[]) => { txs.forEach(tx => tx.partialSign(wallet)); return txs; },
+//     };
+//     const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'confirmed' });
+//     setProvider(provider);
+
+//     const program = new Program(IDL, provider);
+//     const rootBytes = Array.from(Buffer.from(merkleRootHex, 'hex'));
+//     const collectionPDA = getCollectionPDA(wallet.publicKey, collectionName);
+
+//     // Create collection on-chain if it doesn't exist yet
+//     const accountInfo = await connection.getAccountInfo(collectionPDA);
+//     if (!accountInfo) {
+//       await (program.methods as any)
+//         .createCollection(collectionName, 1536, 0)
+//         .accounts({
+//           collection: collectionPDA,
+//           owner: wallet.publicKey,
+//           systemProgram: new PublicKey('11111111111111111111111111111111'),
+//         })
+//         .rpc();
+//       console.log(`[merkle] created collection on-chain: ${collectionPDA.toString()}`);
+//     }
+
+//     const sig = await (program.methods as any)
+//       .updateMerkleRoot(rootBytes, BigInt(vectorCount))
+//       .accounts({ collection: collectionPDA, authority: wallet.publicKey })
+//       .rpc();
+
+//     console.log(`[merkle] root posted → https://explorer.solana.com/tx/${sig}?cluster=devnet`);
+//     return sig;
+//   } catch (err) {
+//     console.error('[merkle] on-chain post failed:', err);
+//     return null;
+//   }
+// }
