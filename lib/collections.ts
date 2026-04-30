@@ -62,9 +62,9 @@ export async function getCollection(
   // 2. Redis cache — fast path
   try {
     const redis = getRedis();
-    const snapshot = await redis.get<string>(collectionKey(userId, collectionName));
+    const snapshot = await redis.get<CollectionSnapshot>(collectionKey(userId, collectionName));
     if (snapshot) {
-      const data = JSON.parse(snapshot) as CollectionSnapshot;
+      const data = snapshot as CollectionSnapshot;
       if (data.vectors && Object.keys(data.vectors).length > 0) {
         const collection = await restoreFromSnapshot(collectionName, dimensions, metric, data);
         cache.set(cacheKey, collection);
@@ -150,7 +150,7 @@ async function _writeRedisCache(
     const redis = getRedis();
     await redis.set(
       collectionKey(userId, collectionName),
-      JSON.stringify(snapshot),
+      snapshot,
       { ex: 60 * 60 * 24 * 7 }
     );
   } catch (err) {

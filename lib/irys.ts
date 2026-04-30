@@ -34,7 +34,8 @@ async function getIrysUploader(serverWallet: Keypair) {
   // @irys/upload-solana expects the raw secret key as a Uint8Array
   return await Uploader(Solana)
     .withWallet(serverWallet.secretKey)
-    .withRpc(SOLANA_RPC);
+    .withRpc(SOLANA_RPC)
+    .devnet();
 }
 
 // Upload encrypted collection snapshot to Irys permanently
