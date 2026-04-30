@@ -91,11 +91,17 @@ export function computeMerkleRoot(vectorIds: string[]): string {
 }
 
 function getCollectionPDA(serverPubkey: PublicKey, userId: string, collectionName: string): PublicKey {
+  // Hash userId+name to fit within 32-byte seed limit
+  const seedHash = createHash('sha256')
+    .update(`${userId}:${collectionName}`)
+    .digest()
+    .slice(0, 32);
+
   const [pda] = PublicKey.findProgramAddressSync(
     [
       Buffer.from('collection'),
       serverPubkey.toBuffer(),
-      Buffer.from(`${userId}:${collectionName}`),
+      seedHash,
     ],
     PROGRAM_ID
   );
