@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { generateApiKey } from '@/lib/keys';
+import { getOrCreateUserWallet } from '@/lib/wallet';
 import { Resend } from 'resend';
 
 export async function POST(req: NextRequest) {
   console.log('PROVISION START');
 
   try {
-    console.log('Provision called, auth header present:', !!req.headers.get('authorization'));
-
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -20,28 +19,18 @@ export async function POST(req: NextRequest) {
       apiVersion: '2026-03-25.dahlia' as any,
     });
 
-    // Authenticate using Supabase JWT
     const authHeader = req.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const jwt = authHeader.replace('Bearer ', '').trim();
-
-    // Verify JWT with Supabase
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(jwt);
     if (userError || !user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // Check if user already has a public.users row with stripe_customer_id
-    const { data: existingUser } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    // Check if user already has API keys
+    // Check if already provisioned
     const { data: existingKeys } = await supabaseAdmin
       .from('api_keys')
       .select('id')
@@ -52,7 +41,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Already provisioned' }, { status: 200 });
     }
 
-    // Create Stripe customer if not exists
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    // Stripe customer
     let stripeCustomerId = existingUser?.stripe_customer_id;
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
@@ -61,7 +56,6 @@ export async function POST(req: NextRequest) {
       });
       stripeCustomerId = customer.id;
 
-      // Subscribe to free tier
       try {
         await stripe.subscriptions.create({
           customer: stripeCustomerId,
@@ -69,11 +63,10 @@ export async function POST(req: NextRequest) {
         });
       } catch (stripeErr) {
         console.warn('Stripe free subscription failed:', stripeErr);
-        // continue — don't crash provision
       }
     }
 
-    // Upsert public.users row
+    // Upsert users row — wallet columns will be populated by getOrCreateUserWallet below
     await supabaseAdmin.from('users').upsert({
       id: user.id,
       email: user.email!,
@@ -81,6 +74,16 @@ export async function POST(req: NextRequest) {
       stripe_customer_id: stripeCustomerId,
       plan: 'free',
     }, { onConflict: 'id' });
+
+    // Generate Solana wallet for this user — encrypted keypair stored in Supabase
+    // This is the key used to encrypt their vectors in Shadow Drive
+    try {
+      const wallet = await getOrCreateUserWallet(user.id);
+      console.log(`[provision] wallet created for ${user.id}: ${wallet.publicKey.toString()}`);
+    } catch (walletErr) {
+      // Log but don't fail provision — wallet can be created on first write
+      console.error('[provision] wallet creation failed:', walletErr);
+    }
 
     // Generate first API key
     const { key, hash, prefix } = generateApiKey();
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest) {
       name: 'Default',
     });
 
-    // Send welcome email
+    // Welcome email
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
@@ -102,19 +105,16 @@ export async function POST(req: NextRequest) {
           <p>Welcome to Recall.</p>
           <p>Your API key: <code>${key}</code></p>
           <p>Save this — it won't be shown again.</p>
+          <p>A Solana wallet has been generated for you. Your vectors are encrypted with its key before reaching our servers.</p>
           <p>Dashboard: <a href="https://app.veclabs.xyz">app.veclabs.xyz</a></p>
           <p>Docs: <a href="https://docs.veclabs.xyz">docs.veclabs.xyz</a></p>
         `,
       });
     } catch (e) {
-      // Email failure should not break provisioning
       console.warn('Welcome email failed:', e);
     }
 
-    return NextResponse.json({
-      message: 'Provisioned',
-      apiKey: key, // shown once
-    });
+    return NextResponse.json({ message: 'Provisioned', apiKey: key });
 
   } catch (err: any) {
     console.error('Provision error:', err.message, err.stack);
