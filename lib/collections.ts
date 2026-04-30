@@ -8,7 +8,7 @@ import { computeMerkleRoot } from './merkle';
 // In-memory cache — survives within a warm function instance only
 const cache = new Map<string, any>();
 
-// Server wallet — signs Shadow Drive uploads (not the user's wallet)
+// Server wallet — signs Irys uploads (not the user's wallet)
 // VECLABS_SERVER_WALLET is the base58-encoded secret key of the VecLabs server wallet
 function getServerWallet(): Keypair {
   const raw = process.env.VECLABS_SERVER_WALLET;
@@ -46,7 +46,7 @@ async function restoreFromSnapshot(
   return collection;
 }
 
-// Get a collection — in-memory cache first, Redis second, Shadow Drive third
+// Get a collection — in-memory cache first, Redis second, Irys third
 export async function getCollection(
   userId: string,
   collectionName: string,
@@ -76,7 +76,7 @@ export async function getCollection(
     console.warn('[collections] Redis restore failed:', err);
   }
 
-  // 3. Shadow Drive — source of truth for cold starts
+  // 3. Irys — source of truth for cold starts
   if (userWallet) {
     try {
       const sdData = await downloadFromIrys(userId, collectionName, userWallet);
@@ -84,15 +84,15 @@ export async function getCollection(
         const data = sdData as CollectionSnapshot;
         const collection = await restoreFromSnapshot(collectionName, dimensions, metric, data);
 
-        // Populate Redis cache from Shadow Drive restore
+        // Populate Redis cache from Irys restore
         await _writeRedisCache(userId, collectionName, data);
 
         cache.set(cacheKey, collection);
-        console.log(`[collections] restored ${Object.keys(data.vectors ?? {}).length} vectors from Shadow Drive for ${userId}:${collectionName}`);
+        console.log(`[collections] restored ${Object.keys(data.vectors ?? {}).length} vectors from Irys for ${userId}:${collectionName}`);
         return collection;
       }
     } catch (err) {
-      console.warn('[collections] Shadow Drive restore failed:', err);
+      console.warn('[collections] Irys restore failed:', err);
     }
   }
 
@@ -103,7 +103,7 @@ export async function getCollection(
   return collection;
 }
 
-// Save a collection — Shadow Drive is source of truth, Redis is cache
+// Save a collection — Irys is source of truth, Redis is cache
 // Never throws — write failures are logged, never crash the request
 export async function saveCollection(
   userId: string,
@@ -125,15 +125,15 @@ export async function saveCollection(
   const vectorIds = Object.keys(snapshot.vectors);
   const merkleRoot = computeMerkleRoot(vectorIds);
 
-  // 1. Shadow Drive — primary persistence (best effort, log failures)
+  // 1. Irys — primary persistence (best effort, log failures)
   if (userWallet) {
     try {
       const serverWallet = getServerWallet();
       await uploadToIrys(userId, collectionName, serverWallet, userWallet, snapshot);
-      console.log(`[collections] uploaded ${vectorIds.length} vectors to Shadow Drive for ${userId}:${collectionName}`);
+      console.log(`[collections] uploaded ${vectorIds.length} vectors to Irys for ${userId}:${collectionName}`);
     } catch (err) {
       // Log but don't crash — Redis cache still has data
-      console.error(`[collections] Shadow Drive upload failed for ${userId}:${collectionName}:`, err);
+      console.error(`[collections] Irys upload failed for ${userId}:${collectionName}:`, err);
     }
   }
 
@@ -176,6 +176,6 @@ export async function deleteCollection(
     console.warn('[collections] Redis delete failed:', err);
   }
 
-  // TODO: delete file from Shadow Drive
+  // TODO: delete file from Irys
   // await drive.deleteFile(storageAccount, fileUrl(userId, collectionName));
 }
