@@ -90,9 +90,13 @@ export function computeMerkleRoot(vectorIds: string[]): string {
   return layer[0].toString('hex');
 }
 
-function getCollectionPDA(owner: PublicKey, collectionName: string): PublicKey {
+function getCollectionPDA(serverPubkey: PublicKey, userId: string, collectionName: string): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from('collection'), owner.toBuffer(), Buffer.from(collectionName)],
+    [
+      Buffer.from('collection'),
+      serverPubkey.toBuffer(),
+      Buffer.from(`${userId}:${collectionName}`),
+    ],
     PROGRAM_ID
   );
   return pda;
@@ -101,20 +105,27 @@ function getCollectionPDA(owner: PublicKey, collectionName: string): PublicKey {
 export async function postMerkleRootToSolana(
   collectionName: string,
   merkleRootHex: string,
-  walletSecretKey: Uint8Array,
-  vectorCount: number = 0
+  _userWalletSecretKey: Uint8Array, // kept for interface compat, not used for signing
+  vectorCount: number = 0,
+  userId: string = ''
 ): Promise<string | null> {
   try {
-    const { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } = await import('@solana/web3.js');
-    const wallet = Keypair.fromSecretKey(walletSecretKey);
+    const { Connection, Keypair, Transaction, TransactionInstruction, PublicKey } = await import('@solana/web3.js');
+
+    // Server wallet pays and signs — Option A
+    const serverSecret = process.env.VECLABS_SERVER_WALLET;
+    if (!serverSecret) throw new Error('VECLABS_SERVER_WALLET not set');
+    const wallet = Keypair.fromSecretKey(Buffer.from(serverSecret, 'base64'));
+
     const connection = new Connection(SOLANA_RPC, 'confirmed');
+    const collectionPDA = getCollectionPDA(wallet.publicKey, userId, collectionName);
 
-    const collectionPDA = getCollectionPDA(wallet.publicKey, collectionName);
+    const accountInfo = await connection.getAccountInfo(collectionPDA);
+    if (!accountInfo) {
+      await createCollectionOnChain(connection, wallet, collectionPDA, `${userId}:${collectionName}`);
+    }
 
-    // update_merkle_root discriminator from IDL
     const discriminator = Buffer.from([195, 173, 38, 60, 242, 203, 158, 93]);
-
-    // Encode args: new_root [u8;32] + new_vector_count u64 (little-endian)
     const rootBytes = Buffer.from(merkleRootHex, 'hex');
     const countBuffer = Buffer.alloc(8);
     countBuffer.writeBigUInt64LE(BigInt(vectorCount));
@@ -128,12 +139,6 @@ export async function postMerkleRootToSolana(
       ],
       data,
     });
-
-    // Check if collection exists — create if not
-    const accountInfo = await connection.getAccountInfo(collectionPDA);
-    if (!accountInfo) {
-      await createCollectionOnChain(connection, wallet, collectionPDA, collectionName);
-    }
 
     const tx = new Transaction().add(instruction);
     tx.feePayer = wallet.publicKey;

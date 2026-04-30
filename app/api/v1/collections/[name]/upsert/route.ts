@@ -56,10 +56,12 @@ export async function POST(
     .eq('name', name);
 
   // Post Merkle root to Solana — fire and forget, does not block the response
+  let solanaTx: string | null = null;
+
   if (merkleRoot) {
-    postMerkleRootToSolana(name, merkleRoot, userWallet.secretKey, records.length).catch((err) =>
-      console.warn('[upsert] Solana Merkle post failed:', err)
-    );
+      solanaTx = await postMerkleRootToSolana(
+        name, merkleRoot, userWallet.secretKey, records.length, auth.userId
+      ).catch(() => null);
   }
 
   await trackUsage(auth.userId, 'write', records.length);
@@ -68,5 +70,9 @@ export async function POST(
     upsertedCount: result.upsertedCount,
     merkleRoot: merkleRoot ?? stats.merkleRoot,
     solanaProgram: '8xjQ2XrdhR4JkGAdTEB7i34DBkbrLRkcgchKjN1Vn5nP',
+    solanaTx,
+    solanaExplorerUrl: solanaTx
+      ? `https://explorer.solana.com/tx/${solanaTx}?cluster=devnet`
+      : null,
   });
 }
