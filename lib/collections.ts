@@ -31,7 +31,7 @@ async function restoreFromSnapshot(
   metric: string,
   snapshot: CollectionSnapshot
 ): Promise<any> {
-  const sv = new SolVec({ network: 'mainnet-beta' }); // hosted API key mode — no wallet needed for in-memory ops
+  const sv = new SolVec({ network: 'mainnet-beta' });
   const collection = sv.collection(name, { dimensions, metric: metric as DistanceMetric });
 
   if (snapshot.vectors && Object.keys(snapshot.vectors).length > 0) {
@@ -111,11 +111,14 @@ export async function saveCollection(
   collection: any,
   userWallet?: Keypair
 ): Promise<string | null> {
+  // Use SDK's public getAllEntries() via hnsw — no internal property access
+  const entries: Array<{ id: string; values: number[]; metadata: Record<string, any> }> = collection.hnsw?.getAllEntries?.() ?? [];
+
   const snapshot: CollectionSnapshot = {
-    vectors: collection._vectors ?? {},
-    metadata: collection._metadata ?? {},
-    writtenAt: collection._written_at ?? {},
-    merkleRootAtWrite: collection._merkle_root_at_write ?? {},
+  vectors: Object.fromEntries(entries.map(e => [e.id, e.values])),
+  metadata: Object.fromEntries(entries.map(e => [e.id, e.metadata ?? {}])),
+  writtenAt: {},
+  merkleRootAtWrite: {},
   };
 
   // Compute fresh Merkle root from current vector IDs
