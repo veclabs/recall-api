@@ -90,19 +90,18 @@ export function computeMerkleRoot(vectorIds: string[]): string {
   return layer[0].toString('hex');
 }
 
-function getCollectionPDA(serverPubkey: PublicKey, userId: string, collectionName: string): PublicKey {
-  // Hash userId+name to fit within 32-byte seed limit
-  const seedHash = createHash('sha256')
+// Generate a short collection name for on-chain use — max 32 chars
+function onChainCollectionName(userId: string, collectionName: string): string {
+  return createHash('sha256')
     .update(`${userId}:${collectionName}`)
-    .digest()
+    .digest('hex')
     .slice(0, 32);
+}
 
+function getCollectionPDA(serverPubkey: PublicKey, userId: string, collectionName: string): PublicKey {
+  const name = onChainCollectionName(userId, collectionName);
   const [pda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from('collection'),
-      serverPubkey.toBuffer(),
-      seedHash,
-    ],
+    [Buffer.from('collection'), serverPubkey.toBuffer(), Buffer.from(name)],
     PROGRAM_ID
   );
   return pda;
@@ -128,7 +127,7 @@ export async function postMerkleRootToSolana(
 
     const accountInfo = await connection.getAccountInfo(collectionPDA);
     if (!accountInfo) {
-      await createCollectionOnChain(connection, wallet, collectionPDA, `${userId}:${collectionName}`);
+      await createCollectionOnChain(connection, wallet, collectionPDA, onChainCollectionName(userId, collectionName));
     }
 
     const discriminator = Buffer.from([195, 173, 38, 60, 242, 203, 158, 93]);
