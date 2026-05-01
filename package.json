@@ -15,7 +15,7 @@
     "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.100.1",
     "@upstash/redis": "^1.37.0",
-    "@veclabs/solvec": "^0.1.0-alpha.15",
+    "@veclabs/solvec": "^0.1.0-alpha.16",
     "bs58": "^6.0.0",
     "next": "16.2.1",
     "react": "19.2.4",
