@@ -98,16 +98,67 @@ export async function POST(req: NextRequest) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
-        from: 'Recall <hello@veclabs.xyz>',
+        from: 'Dhir at Recall <hello@veclabs.xyz>',
         to: user.email!,
-        subject: 'Your Recall API key',
+        subject: 'Welcome to Recall',
         html: `
-          <p>Welcome to Recall.</p>
-          <p>Your API key: <code>${key}</code></p>
-          <p>Save this — it won't be shown again.</p>
-          <p>A Solana wallet has been generated for you. Your vectors are encrypted with its key before reaching our servers.</p>
-          <p>Dashboard: <a href="https://app.veclabs.xyz">app.veclabs.xyz</a></p>
-          <p>Docs: <a href="https://docs.veclabs.xyz">docs.veclabs.xyz</a></p>
+          <div style="font-family: ui-monospace, monospace; max-width: 560px; margin: 0 auto; padding: 40px 20px; color: #111;">
+            <div style="margin-bottom: 32px;">
+              <div style="display: inline-block; background: #111; color: #fff; padding: 6px 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em;">
+                RECALL
+              </div>
+            </div>
+      
+            <h1 style="font-size: 22px; font-weight: 700; color: #111; margin: 0 0 16px; letter-spacing: -0.02em; line-height: 1.2;">
+              Welcome to Recall.
+            </h1>
+      
+            <p style="font-size: 14px; color: #444; line-height: 1.7; margin: 0 0 24px;">
+              Hi — I'm Dhir, I built Recall. Thanks for signing up.
+            </p>
+      
+            <p style="font-size: 14px; color: #444; line-height: 1.7; margin: 0 0 24px;">
+              Recall gives your AI agents persistent, verifiable memory. Every write produces a SHA-256 Merkle root posted to Solana — a cryptographic proof of what your agent remembered at that point in time.
+            </p>
+      
+            <div style="background: #f9f9f9; border: 1px solid #e8e8e8; padding: 20px 24px; margin: 0 0 24px;">
+              <p style="font-size: 12px; color: #999; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.1em;">
+                Get started
+              </p>
+              <p style="font-size: 13px; color: #111; margin: 0 0 8px; font-family: monospace;">
+                1. Your API key is in your dashboard
+              </p>
+              <p style="font-size: 13px; color: #111; margin: 0 0 8px; font-family: monospace;">
+                2. npm install @veclabs/solvec
+              </p>
+              <p style="font-size: 13px; color: #111; margin: 0; font-family: monospace;">
+                3. Start building
+              </p>
+            </div>
+      
+            <div style="margin: 0 0 24px;">
+              <a href="https://app.veclabs.xyz" style="display: inline-block; background: #111; color: #fff; padding: 10px 20px; font-size: 13px; text-decoration: none; margin-right: 12px; font-family: monospace; letter-spacing: 0.04em;">
+                Open dashboard →
+              </a>
+              <a href="https://docs.veclabs.xyz" style="display: inline-block; color: #111; padding: 10px 0; font-size: 13px; text-decoration: none; font-family: monospace; border-bottom: 1px solid #111;">
+                Read the docs ↗
+              </a>
+            </div>
+      
+            <p style="font-size: 14px; color: #444; line-height: 1.7; margin: 0 0 8px;">
+              If you run into anything or have questions — reply to this email directly. I read every message.
+            </p>
+      
+            <p style="font-size: 14px; color: #444; line-height: 1.7; margin: 0 0 32px;">
+              — Dhir
+            </p>
+      
+            <div style="border-top: 1px solid #f0f0f0; padding-top: 20px;">
+              <p style="font-size: 11px; color: #bbb; margin: 0; font-family: monospace;">
+                VecLabs · veclabs.xyz · hello@veclabs.xyz
+              </p>
+            </div>
+          </div>
         `,
       });
     } catch (e) {
