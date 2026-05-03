@@ -29,7 +29,7 @@ export async function POST(
 
   if (!col) return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
 
-  // User wallet needed for Shadow Drive restore on cold start / Redis miss
+  // User wallet needed for Irys restore on cold start / Redis miss
   const userWallet = await getOrCreateUserWallet(auth.userId);
 
   const collection = await getCollection(auth.userId, name, col.dimensions, col.metric, userWallet);
