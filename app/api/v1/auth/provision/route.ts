@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     }, { onConflict: 'id' });
 
     // Generate Solana wallet for this user — encrypted keypair stored in Supabase
-    // This is the key used to encrypt their vectors in Shadow Drive
+    // This is the key used to encrypt their vectors before Irys upload
     try {
       const wallet = await getOrCreateUserWallet(user.id);
       console.log(`[provision] wallet created for ${user.id}: ${wallet.publicKey.toString()}`);
